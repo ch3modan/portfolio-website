@@ -2,6 +2,11 @@
 lucide.createIcons();
 
 document.addEventListener('DOMContentLoaded', () => {
+    let isPageVisible = true;
+    document.addEventListener('visibilitychange', () => {
+        isPageVisible = document.visibilityState === 'visible';
+    });
+
     function throttle(func, limit) {
         let inThrottle;
         return function() {
@@ -213,7 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const render = () => {
-            if (!isPaused) {
+            if (!isPaused && isPageVisible) {
                 ferns.forEach(fern => {
                     // Draw a batch of points for each fern per frame for performance
                     for (let i = 0; i < 25; i++) {
@@ -241,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
             critterEl.className = 'floating-critter';
             critterEl.style.width = `${size}px`;
             critterEl.style.height = `${size}px`;
-            critterEl.style.pointerEvents = 'none'; // Disabled to prevent interference with other UI elements
+            critterEl.style.pointerEvents = 'auto'; // Make critters clickable
             container.appendChild(critterEl);
 
             const critter = {
@@ -288,7 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let animationFrameId;
         const animate = () => {
-            if (!isPaused) {
+            if (!isPaused && isPageVisible) {
                 critters.forEach(c => {
                     c.x += c.vx;
                     c.y += c.vy;
@@ -327,6 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             this.grid = this.createGrid();
             this.isRunning = false;
+            this.isIntersecting = false;
             this.animationFrameId = null;
             this.generationCount = 0;
             this.currentRules = 'classic'; // 'classic' or 'highlife'
@@ -456,7 +462,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         gameLoop(timestamp) {
             this.animationFrameId = requestAnimationFrame((t) => this.gameLoop(t));
-            if (!this.isRunning) return;
+            if (!this.isRunning || !isPageVisible || !this.isIntersecting) return;
 
             const elapsed = timestamp - this.lastUpdateTime;
 
@@ -555,15 +561,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    if (document.getElementById('gameOfLifeCanvas')) {
-        new GameOfLife('gameOfLifeCanvas');
-    }
-
     function setupDraggableSeal() {
         const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint } = Matter;
 
         const critterCorner = document.getElementById('critterCorner');
         if (!critterCorner) return;
+
+        let isSealVisible = false;
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                isSealVisible = entry.isIntersecting;
+            });
+        }, { threshold: 0.1 });
+        observer.observe(critterCorner);
 
         const engine = Engine.create({
             gravity: { y: 0.3 }
@@ -657,7 +667,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         Render.run(render);
         const runner = Runner.create();
-        Runner.run(runner, engine);
+
+        (function tick(time) {
+            if (isPageVisible && isSealVisible) {
+                Runner.tick(runner, engine, time);
+            }
+            requestAnimationFrame(tick);
+        })();
 
         render.canvas.style.pointerEvents = 'none';
 
@@ -673,6 +689,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Initialize everything ---
     setupBarnsleyFernCanvas();
     setupFloatingCritters();
+
+    const gameOfLifeCanvas = document.getElementById('gameOfLifeCanvas');
+    if (gameOfLifeCanvas) {
+        const gameOfLife = new GameOfLife('gameOfLifeCanvas');
+        const gameOfLifeSection = document.getElementById('game-of-life');
+        if (gameOfLifeSection) {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    gameOfLife.isIntersecting = entry.isIntersecting;
+                });
+            }, { threshold: 0.1 });
+            observer.observe(gameOfLifeSection);
+        }
+    }
+
     setupDraggableSeal();
 
     const mobileMenuButton = document.getElementById('mobile-menu-button');
