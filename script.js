@@ -320,23 +320,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             this.ctx = this.canvas.getContext('2d');
             this.cellSize = 10;
-            this.width = 500;
-            this.height = 300;
-            this.cols = Math.floor(this.width / this.cellSize);
-            this.rows = Math.floor(this.height / this.cellSize);
             this.aliveColor = '#10B981';
             this.deadColor = '#1f2937';
 
-            this.canvas.width = this.width;
-            this.canvas.height = this.height;
+            this.setupCanvasSize();
 
             this.grid = this.createGrid();
             this.isRunning = false;
             this.isIntersecting = false;
             this.animationFrameId = null;
             this.generationCount = 0;
-            this.currentRules = 'classic'; // 'classic' or 'highlife'
-            this.speed = 10; // updates per second
+            this.currentRules = 'classic';
+            this.speed = 10;
             this.lastUpdateTime = 0;
             this.updateInterval = 1000 / this.speed;
 
@@ -353,6 +348,31 @@ document.addEventListener('DOMContentLoaded', () => {
             this.patternSelector = document.getElementById('gol-pattern');
 
             this.init();
+
+            window.addEventListener('resize', throttle(() => {
+                this.setupCanvasSize();
+                this.resetSimulation();
+            }, 200));
+        }
+
+        setupCanvasSize() {
+            const parent = this.canvas.parentElement;
+            if (!parent) return;
+
+            const style = window.getComputedStyle(parent);
+            const paddingLeft = parseFloat(style.paddingLeft);
+            const paddingRight = parseFloat(style.paddingRight);
+
+            const containerWidth = parent.clientWidth - paddingLeft - paddingRight;
+
+            this.width = Math.min(500, containerWidth);
+            this.height = Math.floor(this.width * 3 / 5);
+
+            this.canvas.width = this.width;
+            this.canvas.height = this.height;
+
+            this.cols = Math.floor(this.width / this.cellSize);
+            this.rows = Math.floor(this.height / this.cellSize);
         }
 
         createGrid() {
@@ -614,22 +634,22 @@ document.addEventListener('DOMContentLoaded', () => {
         let isDragging = false;
         let startDragPos = { x: 0, y: 0 };
 
-        window.addEventListener('mousedown', (e) => {
-            const mousePosition = { x: e.clientX, y: e.clientY };
-            const bodies = Matter.Query.point([sealBody], mousePosition);
+        function onDragStart(point) {
+            const bodies = Matter.Query.point([sealBody], point);
             if (bodies.length > 0) {
                 draggedBody = bodies[0];
                 isDragging = true;
-                startDragPos = mousePosition;
+                startDragPos = point;
                 Matter.Body.setStatic(draggedBody, true);
+                return true;
             }
-        });
+            return false;
+        }
 
-        window.addEventListener('mousemove', (e) => {
+        function onDragMove(point) {
             if (isDragging && draggedBody) {
-                const mousePosition = { x: e.clientX, y: e.clientY };
-                const dx = Math.abs(mousePosition.x - startDragPos.x);
-                const dy = Math.abs(mousePosition.y - startDragPos.y);
+                const dx = Math.abs(point.x - startDragPos.x);
+                const dy = Math.abs(point.y - startDragPos.y);
 
                 if (dx > 5 || dy > 5) {
                     const scrollContainer = document.getElementById('scrollContainer');
@@ -637,21 +657,18 @@ document.addEventListener('DOMContentLoaded', () => {
                         scrollContainer.style.overflowY = 'hidden';
                     }
                 }
-
-                Matter.Body.setPosition(draggedBody, mousePosition);
+                Matter.Body.setPosition(draggedBody, point);
             }
-        });
+        }
 
-        window.addEventListener('mouseup', (e) => {
+        function onDragEnd(point) {
             if (isDragging && draggedBody) {
-                const mousePosition = { x: e.clientX, y: e.clientY };
-                const dx = Math.abs(mousePosition.x - startDragPos.x);
-                const dy = Math.abs(mousePosition.y - startDragPos.y);
+                const dx = Math.abs(point.x - startDragPos.x);
+                const dy = Math.abs(point.y - startDragPos.y);
 
                 Matter.Body.setStatic(draggedBody, false);
 
                 if (dx <= 5 && dy <= 5) {
-                    // It's a click, not a drag
                     Matter.Body.applyForce(draggedBody, draggedBody.position, { x: 0, y: -0.1 * draggedBody.mass });
                 }
 
@@ -662,6 +679,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (scrollContainer) {
                     scrollContainer.style.overflowY = 'auto';
                 }
+            }
+        }
+
+        window.addEventListener('mousedown', (e) => {
+            onDragStart({ x: e.clientX, y: e.clientY });
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            onDragMove({ x: e.clientX, y: e.clientY });
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            onDragEnd({ x: e.clientX, y: e.clientY });
+        });
+
+        window.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 0) {
+                const touch = e.touches[0];
+                if (onDragStart({ x: touch.clientX, y: touch.clientY })) {
+                    e.preventDefault();
+                }
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchmove', (e) => {
+            if (e.touches.length > 0) {
+                const touch = e.touches[0];
+                onDragMove({ x: touch.clientX, y: touch.clientY });
+            }
+        });
+
+        window.addEventListener('touchend', (e) => {
+            if (e.changedTouches.length > 0) {
+                const touch = e.changedTouches[0];
+                onDragEnd({ x: touch.clientX, y: touch.clientY });
             }
         });
 
