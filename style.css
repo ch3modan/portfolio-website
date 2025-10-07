@@ -81,6 +81,7 @@ html {
 /* General body styling for full height and overflow */
 body {
     height: 100%;
+    overflow-y: hidden; /* Prevent body from scrolling, only scrollContainer */
     overflow-x: hidden;
 }
 
